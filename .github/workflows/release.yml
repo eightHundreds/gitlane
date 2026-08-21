@@ -32,15 +32,17 @@ jobs:
             exit 1
           fi
       - name: Publish to npm
+        id: npm
+        continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           if npm view "gitlane@${VERSION}" version >/dev/null 2>&1; then
             echo "gitlane@${VERSION} is already on npm, skipping publish"
-          else
-            npm publish --access public --provenance
+            exit 0
           fi
+          npm publish --access public --provenance
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,3 +52,17 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
           fi
+      - name: Fail if npm publish did not land
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "${{ steps.npm.outcome }}" = "success" ]; then
+            exit 0
+          fi
+          if npm view "gitlane@${VERSION}" version >/dev/null 2>&1; then
+            echo "gitlane@${VERSION} is on npm"
+            exit 0
+          fi
+          echo "npm publish failed. Use an npm Automation token (not a Publish token that requires OTP)."
+          exit 1
