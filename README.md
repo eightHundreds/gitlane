@@ -4,6 +4,8 @@
 
 绑定一个仓库、起一个 HTTP 服务即可。写入操作走 CSRF 保护的 `POST /api/action`。
 
+![Gitlane 使用演示：浏览提交图、展开详情、左右 diff、右键分支](docs/demo.gif)
+
 ## 运行
 
 ```bash
