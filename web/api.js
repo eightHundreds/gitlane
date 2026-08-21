@@ -5,7 +5,7 @@ export function csrfToken() {
 export async function api(path, options = {}) {
 	const headers = { ...(options.headers || {}) };
 	if (options.method && options.method !== 'GET') {
-		headers['X-Git-Graph-Token'] = csrfToken();
+		headers['X-Gitlane-Token'] = csrfToken();
 	}
 	const res = await fetch(path, { ...options, headers });
 	let data = {};

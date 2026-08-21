@@ -248,7 +248,7 @@ describe('dispatcher coverage for remaining git actions', () => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-Git-Graph-Token': listening.csrfToken
+					'X-Gitlane-Token': listening.csrfToken
 				},
 				body: JSON.stringify({ action: 'revert', hash: added })
 			});

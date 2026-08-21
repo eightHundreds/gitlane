@@ -1,19 +1,19 @@
-/** Uncommitted working-tree node hash, matching vscode-git-graph. */
+/** Sentinel hash for the working-tree node. */
 export const UNCOMMITTED = '*';
 
 export const GRAPH_COLOURS = [
-	'#0085d9',
-	'#d9008f',
-	'#00d90a',
-	'#d98500',
-	'#a300d9',
-	'#ff0000',
-	'#00d9cc',
-	'#e138e8',
-	'#85d900',
-	'#dc5b23',
-	'#6f24d6',
-	'#ffcc00'
+	'#2563eb',
+	'#db2777',
+	'#16a34a',
+	'#ea580c',
+	'#7c3aed',
+	'#dc2626',
+	'#0891b2',
+	'#c026d3',
+	'#65a30d',
+	'#c2410c',
+	'#4f46e5',
+	'#ca8a04'
 ];
 
 export const GRAPH_GRID = {

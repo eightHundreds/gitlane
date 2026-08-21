@@ -385,7 +385,7 @@ describe('browser graph + Monaco (playwright if available)', () => {
 			await page.click('#themeBtn');
 			const afterDark = await page.evaluate(() => ({
 				theme: document.documentElement.getAttribute('data-theme'),
-				stored: localStorage.getItem('git-graph-theme'),
+				stored: localStorage.getItem('gitlane-theme'),
 				bg: getComputedStyle(document.body).backgroundColor,
 				btn: document.getElementById('themeBtn')?.textContent
 			}));

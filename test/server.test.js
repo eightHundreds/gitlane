@@ -61,7 +61,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 		const html = await ui.text();
 		assert.match(html, /commitGraph/);
 		assert.match(html, /monaco/i);
-		assert.match(html, /Git Graph/);
+		assert.match(html, /Gitlane/);
 
 		const appJs = await fetch(new URL('/app.js', listening.url));
 		assert.equal(appJs.status, 200);
@@ -108,7 +108,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 				headers: {
 					'content-type': 'application/json',
 					origin: 'https://evil.example',
-					'x-git-graph-token': token,
+					'x-gitlane-token': token,
 					host
 				}
 			}, ctx).ok,
@@ -128,7 +128,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 			mutationAllowed({
 				headers: {
 					'content-type': 'application/json',
-					'x-git-graph-token': token,
+					'x-gitlane-token': token,
 					host
 				}
 			}, ctx).ok,
@@ -138,7 +138,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 			mutationAllowed({
 				headers: {
 					'content-type': 'application/json',
-					'x-git-graph-token': token,
+					'x-gitlane-token': token,
 					origin: `http://${host}`,
 					host
 				}
@@ -162,7 +162,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 			headers: {
 				'Content-Type': 'application/json',
 				Origin: 'https://evil.example',
-				'X-Git-Graph-Token': token
+				'X-Gitlane-Token': token
 			},
 			body: JSON.stringify({ action: 'checkout', target: 'feature' })
 		});
@@ -178,7 +178,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 
 		const tooBig = await fetch(new URL('/api/action', listening.url), {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json', 'X-Git-Graph-Token': token },
+			headers: { 'Content-Type': 'application/json', 'X-Gitlane-Token': token },
 			body: 'x'.repeat(MAX_WRITE_BODY + 8)
 		});
 		assert.equal(tooBig.status, 413);
@@ -254,7 +254,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 
 		const legacy = await fetch(new URL('/api/checkout', listening.url), {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json', 'X-Git-Graph-Token': listening.csrfToken },
+			headers: { 'Content-Type': 'application/json', 'X-Gitlane-Token': listening.csrfToken },
 			body: JSON.stringify({ action: 'checkout', target: 'feature' })
 		});
 		assert.equal(legacy.status, 404);
@@ -274,7 +274,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 		assert.match(String(body.error), /invalid object name|bad revision|unknown revision|ambiguous argument/i);
 	});
 
-	it('served UI includes Git Graph chrome and ships UI modules', async () => {
+	it('served UI includes Gitlane chrome and ships UI modules', async () => {
 		const html = await (await fetch(listening.url)).text();
 		assert.match(html, /id="errorBanner"/);
 		assert.match(html, /commitGraph/);

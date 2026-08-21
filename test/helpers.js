@@ -117,7 +117,7 @@ export function postAction(listening, body) {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			'X-Git-Graph-Token': listening.csrfToken
+			'X-Gitlane-Token': listening.csrfToken
 		},
 		body: JSON.stringify(body)
 	});

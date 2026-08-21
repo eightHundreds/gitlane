@@ -133,7 +133,7 @@ describe('git actions on a real repository', () => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-Git-Graph-Token': listening.csrfToken
+					'X-Gitlane-Token': listening.csrfToken
 				},
 				body: JSON.stringify({ hash: isolated.hashes.initial, mode: 'mixed' })
 			});
@@ -194,7 +194,7 @@ describe('git actions on a real repository', () => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-Git-Graph-Token': listening.csrfToken
+					'X-Gitlane-Token': listening.csrfToken
 				},
 				body: JSON.stringify({ action: 'not-a-real-action' })
 			});
@@ -205,7 +205,7 @@ describe('git actions on a real repository', () => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'X-Git-Graph-Token': listening.csrfToken
+					'X-Gitlane-Token': listening.csrfToken
 				},
 				body: JSON.stringify({ action: 'cherryPick', hash: pick })
 			});

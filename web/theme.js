@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'git-graph-theme';
+const STORAGE_KEY = 'gitlane-theme';
 
 export function resolvedTheme() {
 	try {

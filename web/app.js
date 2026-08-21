@@ -38,7 +38,7 @@ async function loadGraph() {
 	state.remotes = data.remotes || [];
 	els.repoLabel.textContent = data.repo;
 	els.branchLabel.textContent = data.detached ? 'HEAD detached' : data.branch || '';
-	document.title = `Git Graph — ${data.branch || 'repository'}`;
+	document.title = `Gitlane — ${data.branch || 'repository'}`;
 	fillBranchFilter(state.branches);
 	if (els.fetchBtn) els.fetchBtn.hidden = state.remotes.length === 0;
 	renderTable();

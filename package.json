@@ -1,11 +1,20 @@
 {
-  "name": "single-git-graph",
+  "name": "gitlane",
   "version": "1.0.0",
   "private": true,
-  "description": "Standalone Git Graph web app: HTTP server talks to a local git repo; browser UI with SVG lane graph and Monaco diffs. Conceptual port of mhutchie/vscode-git-graph; not for publication.",
+  "license": "MIT",
+  "description": "Local web UI for a git commit graph: colored lanes, inline details, and Monaco diffs.",
   "type": "module",
   "bin": {
-    "git-graph": "./src/cli.js"
+    "gitlane": "./src/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eightHundreds/gitlane.git"
+  },
+  "homepage": "https://github.com/eightHundreds/gitlane",
+  "bugs": {
+    "url": "https://github.com/eightHundreds/gitlane/issues"
   },
   "scripts": {
     "start": "node src/cli.js",

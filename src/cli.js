@@ -31,10 +31,10 @@ export function parseCliArgs(argv) {
 }
 
 export function printUsage() {
-	console.log(`Usage: git-graph <repo-path> [--port 3840] [--host 127.0.0.1] [--no-open]
+	console.log(`Usage: gitlane <repo-path> [--port 3840] [--host 127.0.0.1] [--no-open]
 
 Start a local web server that reads/writes the given git repository and
-opens a Git Graph UI in the browser (Monaco diffs, no VS Code).`);
+opens Gitlane in the browser (Monaco diffs).`);
 }
 
 async function tryOpenBrowser(url) {
@@ -70,7 +70,7 @@ export async function startFromArgs(argv, options = {}) {
 		host: parsed.host,
 		port: parsed.port
 	});
-	console.log('Git Graph');
+	console.log('Gitlane');
 	console.log(`  repo: ${repo}`);
 	console.log(`  url:  ${listening.url}`);
 	if (parsed.openBrowser && options.open !== false) {

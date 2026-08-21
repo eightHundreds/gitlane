@@ -79,7 +79,7 @@ export function mutationAllowed(req, ctx = {}) {
 	if (site === 'cross-site') {
 		return { ok: false, error: 'Cross-origin write rejected' };
 	}
-	const token = req.headers['x-git-graph-token'];
+	const token = req.headers['x-gitlane-token'];
 	if (!ctx.csrfToken || token !== ctx.csrfToken) {
 		return { ok: false, error: 'Invalid CSRF token' };
 	}

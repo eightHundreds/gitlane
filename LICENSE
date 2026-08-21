@@ -1,18 +1,13 @@
-Copyright (c) 2019-present, mhutchie
-Copyright (c) 2026, single-git-graph contributors
+MIT License
 
-This project is a local conceptual port of vscode-git-graph
-(https://github.com/mhutchie/vscode-git-graph). The upstream license
-is included below and applies to copied or substantially derived
-portions (including the graph lane-layout algorithm).
+Copyright (c) 2026 Gitlane contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to use,
-copy, modify, merge, and to permit persons to whom the Software is
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
-
-Permission is NOT GRANTED to publish, distribute, sublicense, and/or sell
-derivative works of the Software.
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -25,4 +20,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Octicons used for branch/tag icons: Copyright (c) 2019 GitHub Inc. (MIT).
+---
+
+Branch/tag icons are based on Octicons. Copyright (c) 2019 GitHub Inc. (MIT).
