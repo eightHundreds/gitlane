@@ -87,10 +87,6 @@ describe('browser graph + Monaco (playwright if available)', () => {
 			assert.match(summary, /Parents:/);
 			assert.match(summary, /Author:/);
 			assert.match(summary, /Fixture User/);
-			await page.screenshot({
-				path: '/var/folders/0h/hrn9lk3s4ws_8r3h_z5_czyw0000gn/T/grok-goal-5e32f7b48590/implementer/graph.png',
-				fullPage: true
-			});
 			await page.locator('#cdvFiles .file-row', { hasText: 'README.md' }).click();
 			await page.waitForSelector('.monaco-diff-editor.side-by-side', { timeout: 15000 });
 			await page.waitForTimeout(800);
