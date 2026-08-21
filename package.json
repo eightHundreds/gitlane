@@ -1,0 +1,23 @@
+{
+  "name": "single-git-graph",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Git Graph web app: HTTP server talks to a local git repo; browser UI with SVG lane graph and Monaco diffs. Conceptual port of mhutchie/vscode-git-graph; not for publication.",
+  "type": "module",
+  "bin": {
+    "git-graph": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.52.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
