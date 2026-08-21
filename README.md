@@ -58,7 +58,7 @@ npm version patch   # 或 minor / major
 git push origin main --follow-tags
 ```
 
-仓库需要配置 secret `NPM_TOKEN`（npm Automation token，权限包含 publish）。
+仓库需要配置 secret `NPM_TOKEN`：在 [npm Access Tokens](https://www.npmjs.com/settings/~/tokens) 生成 **Automation** 类型（不要用 Publish，那种会要求 OTP，GitHub Actions 过不了）。
 
 ## 许可
 
