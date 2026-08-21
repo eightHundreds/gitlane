@@ -1,12 +1,8 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveRepo } from './git.js';
-import { listenGitGraph } from './server.js';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MONACO_LOADER = path.join(ROOT, 'node_modules', 'monaco-editor', 'min', 'vs', 'loader.js');
+import { listenGitGraph, monacoMinDir } from './server.js';
 
 export function parseCliArgs(argv) {
 	let repo = null;
@@ -62,9 +58,7 @@ export async function startFromArgs(argv, options = {}) {
 	}
 	const repoInput = parsed.repo || process.cwd();
 	const repo = await resolveRepo(repoInput);
-	if (!existsSync(MONACO_LOADER)) {
-		throw new Error('monaco-editor is missing. Run npm install in the project root.');
-	}
+	monacoMinDir();
 	const listening = await listenGitGraph({
 		repo,
 		host: parsed.host,

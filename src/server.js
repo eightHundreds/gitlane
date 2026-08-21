@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { existsSync, createReadStream, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -18,7 +19,21 @@ import { runAction } from './actions.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const WEB_DIR = path.join(ROOT, 'web');
-const MONACO_DIR = path.join(ROOT, 'node_modules', 'monaco-editor', 'min');
+const require = createRequire(import.meta.url);
+
+export function monacoMinDir() {
+	let pkgDir;
+	try {
+		pkgDir = path.dirname(require.resolve('monaco-editor/package.json'));
+	} catch {
+		throw new Error('monaco-editor is not installed. Reinstall Gitlane: npm install -g gitlane');
+	}
+	const min = path.join(pkgDir, 'min');
+	if (!existsSync(path.join(min, 'vs', 'loader.js'))) {
+		throw new Error('monaco-editor is incomplete. Reinstall Gitlane: npm install -g gitlane');
+	}
+	return min;
+}
 
 const MIME = {
 	'.html': 'text/html; charset=utf-8',
@@ -252,7 +267,7 @@ export function createGitGraphServer(options) {
 
 		if (url.pathname.startsWith('/vendor/monaco/')) {
 			const rel = url.pathname.slice('/vendor/monaco/'.length);
-			const filePath = safeJoin(MONACO_DIR, rel);
+			const filePath = safeJoin(monacoMinDir(), rel);
 			if (!filePath || !existsSync(filePath)) {
 				send(res, 404, 'Not found');
 				return;

@@ -1,6 +1,6 @@
 {
   "name": "gitlane",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "description": "Local web UI for a git commit graph: colored lanes, inline details, and Monaco diffs.",
   "type": "module",

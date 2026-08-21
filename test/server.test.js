@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEmptyRepo, createFixtureRepo, gitRaw, postAction } from './helpers.js';
-import { formatListenUrl, listenGitGraph, mutationAllowed, MAX_WRITE_BODY } from '../src/server.js';
+import { existsSync } from 'node:fs';
+import { formatListenUrl, listenGitGraph, monacoMinDir, mutationAllowed, MAX_WRITE_BODY } from '../src/server.js';
 import { UNCOMMITTED } from '../web/constants.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,6 +24,11 @@ describe('HTTP server (shipped entry adapter)', () => {
 			await new Promise((resolve) => listening.server.close(resolve));
 		}
 		if (fx?.repo) await fs.rm(fx.repo, { recursive: true, force: true });
+	});
+
+	it('resolves monaco-editor from the Node module search path', () => {
+		const dir = monacoMinDir();
+		assert.ok(existsSync(path.join(dir, 'vs', 'loader.js')));
 	});
 
 	it('package manifest has no vscode dependency', async () => {
