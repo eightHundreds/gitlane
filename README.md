@@ -4,23 +4,38 @@
 
 绑定一个仓库、起一个 HTTP 服务即可。写入操作走 CSRF 保护的 `POST /api/action`。
 
-![Gitlane 使用演示：浏览提交图、展开详情、左右 diff、右键分支](docs/demo.gif)
+![Gitlane 使用演示：浏览提交图、展开详情、左右 diff、右键分支](https://raw.githubusercontent.com/eightHundreds/gitlane/main/docs/demo.gif)
 
-## 运行
+## 安装
 
 ```bash
-npm install
-node src/cli.js /path/to/repo
-# 或
-npx gitlane /path/to/repo
-# 或
-npm start -- /path/to/repo --port 3840
+npm install -g gitlane
+gitlane /path/to/repo
 ```
 
-服务会打印 URL（默认 `http://127.0.0.1:3840/`），并尝试打开系统浏览器。加 `--no-open` 可只启动服务。
+或不安装，直接跑：
+
+```bash
+npx gitlane /path/to/repo
+```
+
+默认打开 `http://127.0.0.1:3840/`。常用参数：
 
 ```
 gitlane <repo-path> [--port 3840] [--host 127.0.0.1] [--no-open]
+```
+
+## 开发
+
+```bash
+git clone https://github.com/eightHundreds/gitlane.git
+cd gitlane
+npm install
+node src/cli.js /path/to/repo
+```
+
+```bash
+npm test
 ```
 
 ## 界面
@@ -34,11 +49,16 @@ gitlane <repo-path> [--port 3840] [--host 127.0.0.1] [--no-open]
 - 工具栏：分支过滤、Remotes/Stashes、Fetch、Find、Load More、亮/暗主题（跟随系统，可手动切换）
 - 键盘：Ctrl/Cmd+F 查找，Ctrl/Cmd+R 刷新，Ctrl/Cmd+H 滚到 HEAD，方向键换详情，Esc 关闭
 
-## 测试
+## 发版
+
+`package.json` 的 `version` 必须和 git tag 一致，例如 `1.0.1` 对应 `v1.0.1`。推送 tag 后，GitHub Actions 会跑测试、发布 npm，并创建 GitHub Release。
 
 ```bash
-npm test
+npm version patch   # 或 minor / major
+git push origin main --follow-tags
 ```
+
+仓库需要配置 secret `NPM_TOKEN`（npm Automation token，权限包含 publish）。
 
 ## 许可
 

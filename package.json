@@ -1,13 +1,27 @@
 {
   "name": "gitlane",
   "version": "1.0.0",
-  "private": true,
   "license": "MIT",
   "description": "Local web UI for a git commit graph: colored lanes, inline details, and Monaco diffs.",
   "type": "module",
   "bin": {
-    "gitlane": "./src/cli.js"
+    "gitlane": "src/cli.js"
   },
+  "files": [
+    "src",
+    "web",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "git",
+    "git-gui",
+    "commit-graph",
+    "diff",
+    "monaco",
+    "cli"
+  ],
+  "author": "eightHundreds",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/eightHundreds/gitlane.git"
@@ -15,6 +29,9 @@
   "homepage": "https://github.com/eightHundreds/gitlane",
   "bugs": {
     "url": "https://github.com/eightHundreds/gitlane/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "start": "node src/cli.js",
