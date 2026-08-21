@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutGraph } from '../src/layout.js';
+import { layoutGraph } from '../dist/layout.js';
 import { layoutHasParentEdge } from './helpers.js';
 
 describe('layoutGraph (pure DAG)', () => {
@@ -20,5 +20,19 @@ describe('layoutGraph (pure DAG)', () => {
 		assert.ok(layoutHasParentEdge(layout, 1, 3));
 		assert.ok(layoutHasParentEdge(layout, 2, 3));
 		assert.ok(layout.branches.some((b) => b.lines.length > 0));
+	});
+
+	it('places a stash on a fresh lane instead of looking up its hash', () => {
+		const layout = layoutGraph(
+			[
+				{ hash: 's', parents: ['b'], stash: { selector: 'stash@{0}', baseHash: 'b' } },
+				{ hash: 'b', parents: ['a'] },
+				{ hash: 'a', parents: [] }
+			],
+			{ head: 'b' }
+		);
+		assert.equal(layout.vertices[0].isStash, true);
+		assert.equal(layout.vertices[1].isStash, false);
+		assert.ok(layoutHasParentEdge(layout, 0, 1));
 	});
 });

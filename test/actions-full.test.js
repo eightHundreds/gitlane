@@ -4,9 +4,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createFixtureRepo, gitRaw, gitRawFull } from './helpers.js';
-import { getCommits, UNCOMMITTED } from '../src/git.js';
-import { runAction } from '../src/actions.js';
-import { listenGitGraph } from '../src/server.js';
+import { getCommits, UNCOMMITTED } from '../dist/git.js';
+import { runAction } from '../dist/actions.js';
+import { listenGitGraph } from '../dist/server.js';
 
 async function cleanUntrackedFile(repo) {
 	await fs.unlink(path.join(repo, 'uncommitted.txt')).catch(() => {});

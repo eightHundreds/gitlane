@@ -2,10 +2,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_MAX_COMMITS, UNCOMMITTED } from '../web/constants.js';
+import { DEFAULT_MAX_COMMITS, UNCOMMITTED } from './constants.js';
 import { layoutGraph } from './layout.js';
+import {
+	assembleCommitGraph,
+	insertStashes,
+	uncommittedCommit
+} from './graph-model.js';
+import type { FileChange, StashRecord } from './types.js';
 
 export { layoutGraph };
+export { assembleCommitGraph, insertStashes, uncommittedCommit } from './graph-model.js';
 
 const execFileAsync = promisify(execFile);
 const LOG_SEP = 'XX7Nal-YARtTpjCikii9nJxER19D6diSyk-AWkPb';
@@ -15,7 +22,10 @@ const DETAILS_FORMAT = ['%H', '%P', '%an', '%ae', '%at', '%cn', '%ce', '%ct', '%
 export { UNCOMMITTED };
 
 export class GitError extends Error {
-	constructor(message, extra = {}) {
+	args?: string[];
+	code?: string | number;
+	statusCode?: number;
+	constructor(message: string, extra: { args?: string[]; code?: string | number } = {}) {
 		super(message);
 		this.name = 'GitError';
 		this.args = extra.args;
@@ -23,14 +33,19 @@ export class GitError extends Error {
 	}
 }
 
+type GitRunOptions = {
+	maxBuffer?: number;
+	env?: NodeJS.ProcessEnv;
+};
+
 /**
  * Run git in `repo`. Returns stdout as a string.
  */
-export async function runGit(repo, args, options = {}) {
+export async function runGit(repo: string, args: string[], options: GitRunOptions = {}): Promise<string> {
 	try {
 		const { stdout } = await execFileAsync('git', args, {
 			cwd: repo,
-			encoding: options.encoding ?? 'utf8',
+			encoding: 'utf8',
 			maxBuffer: options.maxBuffer ?? 32 * 1024 * 1024,
 			env: {
 				...process.env,
@@ -41,19 +56,20 @@ export async function runGit(repo, args, options = {}) {
 			}
 		});
 		return stdout;
-	} catch (err) {
-		const detail = [err.stderr, err.stdout, err.message].filter(Boolean).join('\n').trim();
-		throw new GitError(detail || 'git failed', { args, code: err.code });
+	} catch (err: unknown) {
+		const e = err as { stderr?: string; stdout?: string; message?: string; code?: string | number };
+		const detail = [e.stderr, e.stdout, e.message].filter(Boolean).join('\n').trim();
+		throw new GitError(detail || 'git failed', { args, code: e.code });
 	}
 }
 
-export async function resolveRepo(inputPath) {
+export async function resolveRepo(inputPath: string) {
 	const abs = path.resolve(inputPath);
 	const toplevel = (await runGit(abs, ['rev-parse', '--show-toplevel'])).trim();
 	return path.resolve(toplevel);
 }
 
-export async function isGitRepo(inputPath) {
+export async function isGitRepo(inputPath: string) {
 	try {
 		await resolveRepo(inputPath);
 		return true;
@@ -62,12 +78,12 @@ export async function isGitRepo(inputPath) {
 	}
 }
 
-function splitLines(text) {
+function splitLines(text: string) {
 	if (!text) return [];
 	return text.split(/\r\n|\r|\n/);
 }
 
-function parseNameStatusZ(stdout, dropFirst = false) {
+function parseNameStatusZ(stdout: string, dropFirst = false) {
 	const parts = stdout.split('\0');
 	if (dropFirst && parts.length) parts.shift();
 	const records = [];
@@ -97,7 +113,7 @@ function parseNameStatusZ(stdout, dropFirst = false) {
 	return records;
 }
 
-function parseNumStatZ(stdout, dropFirst = false) {
+function parseNumStatZ(stdout: string, dropFirst = false) {
 	const parts = stdout.split('\0');
 	if (dropFirst && parts.length) parts.shift();
 	const records = [];
@@ -124,7 +140,7 @@ function parseNumStatZ(stdout, dropFirst = false) {
 	return records;
 }
 
-async function execDiff(repo, fromHash, toHash, flag, filter = 'AMDR') {
+async function execDiff(repo: string, fromHash: string, toHash: string, flag: string, filter = 'AMDR') {
 	let args;
 	const same = fromHash && toHash && fromHash === toHash;
 	if (same || !fromHash) {
@@ -137,17 +153,17 @@ async function execDiff(repo, fromHash, toHash, flag, filter = 'AMDR') {
 	return { stdout, dropFirst: Boolean(same || !fromHash) };
 }
 
-async function getDiffNameStatus(repo, fromHash, toHash) {
+async function getDiffNameStatus(repo: string, fromHash: string, toHash: string) {
 	const { stdout, dropFirst } = await execDiff(repo, fromHash, toHash, '--name-status');
 	return parseNameStatusZ(stdout, dropFirst);
 }
 
-async function getDiffNumStat(repo, fromHash, toHash) {
+async function getDiffNumStat(repo: string, fromHash: string, toHash: string) {
 	const { stdout, dropFirst } = await execDiff(repo, fromHash, toHash, '--numstat');
 	return parseNumStatZ(stdout, dropFirst);
 }
 
-function parsePorcelainZ(stdout) {
+function parsePorcelainZ(stdout: string) {
 	const output = stdout.split('\0');
 	const entries = [];
 	let i = 0;
@@ -161,14 +177,14 @@ function parsePorcelainZ(stdout) {
 	return entries;
 }
 
-async function readPorcelainStatus(repo) {
+async function readPorcelainStatus(repo: string) {
 	return parsePorcelainZ(
 		await runGit(repo, ['status', '-s', '--untracked-files=all', '--porcelain', '-z'])
 	);
 }
 
-async function getStatusFiles(repo) {
-	const status = { deleted: [], untracked: [] };
+async function getStatusFiles(repo: string) {
+	const status: { deleted: string[]; untracked: string[] } = { deleted: [], untracked: [] };
 	for (const { filePath, c1, c2 } of await readPorcelainStatus(repo)) {
 		if (c1 === 'D' || c2 === 'D') status.deleted.push(filePath);
 		else if (c1 === '?' || c2 === '?') status.untracked.push(filePath);
@@ -176,9 +192,13 @@ async function getStatusFiles(repo) {
 	return status;
 }
 
-function mergeFileChanges(nameStatus, numStat, status) {
-	const fileChanges = [];
-	const lookup = {};
+function mergeFileChanges(
+	nameStatus: { type: string; oldFilePath: string; newFilePath: string }[],
+	numStat: { filePath: string; additions: number | null; deletions: number | null }[],
+	status: { deleted: string[]; untracked: string[] } | null
+) {
+	const fileChanges: FileChange[] = [];
+	const lookup: Record<string, number> = {};
 	for (const rec of nameStatus) {
 		lookup[rec.newFilePath] = fileChanges.length;
 		fileChanges.push({
@@ -228,14 +248,19 @@ function mergeFileChanges(nameStatus, numStat, status) {
 	return fileChanges;
 }
 
-async function getRefs(repo) {
+async function getRefs(repo: string) {
 	let stdout;
 	try {
 		stdout = await runGit(repo, ['show-ref', '-d', '--head']);
 	} catch {
 		return { head: null, heads: [], tags: [], remotes: [] };
 	}
-	const refData = { head: null, heads: [], tags: [], remotes: [] };
+	const refData: {
+		head: string | null;
+		heads: { hash: string; name: string }[];
+		tags: { hash: string; name: string; annotated: boolean }[];
+		remotes: { hash: string; name: string }[];
+	} = { head: null, heads: [], tags: [], remotes: [] };
 	const tagByName = new Map();
 	for (const line of splitLines(stdout)) {
 		if (!line) continue;
@@ -270,13 +295,13 @@ async function getRefs(repo) {
 	return refData;
 }
 
-async function countUncommitted(repo) {
+async function countUncommitted(repo: string) {
 	const stdout = await runGit(repo, ['status', '--untracked-files=all', '--porcelain']);
 	const lines = splitLines(stdout).filter((l) => l !== '');
 	return lines.length;
 }
 
-async function branchFromSymbolicRef(repo) {
+async function branchFromSymbolicRef(repo: string) {
 	try {
 		const ref = (await runGit(repo, ['symbolic-ref', '--quiet', 'HEAD'])).trim();
 		if (ref.startsWith('refs/heads/')) return ref.slice('refs/heads/'.length);
@@ -286,7 +311,7 @@ async function branchFromSymbolicRef(repo) {
 	}
 }
 
-async function getHeadBranch(repo) {
+async function getHeadBranch(repo: string) {
 	try {
 		const name = (await runGit(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
 		if (!name || name === 'HEAD') return branchFromSymbolicRef(repo);
@@ -297,7 +322,7 @@ async function getHeadBranch(repo) {
 	}
 }
 
-export async function listRemotes(repo) {
+export async function listRemotes(repo: string) {
 	try {
 		const stdout = await runGit(repo, ['remote']);
 		return splitLines(stdout)
@@ -308,7 +333,7 @@ export async function listRemotes(repo) {
 	}
 }
 
-export async function listStashes(repo) {
+export async function listStashes(repo: string): Promise<StashRecord[]> {
 	let stdout = '';
 	try {
 		stdout = await runGit(repo, [
@@ -324,10 +349,11 @@ export async function listStashes(repo) {
 		if (!line) continue;
 		const [hash, selector, parents, date, author, email, message] = line.split('\x1f');
 		if (!hash || !selector) continue;
+		const parentHashes = parents ? parents.split(' ').filter(Boolean) : [];
 		stashes.push({
 			hash,
 			selector,
-			parents: parents ? parents.split(' ').filter(Boolean) : [],
+			baseHash: parentHashes[0] || null,
 			date: parseInt(date, 10) || 0,
 			author: author || '',
 			email: email || '',
@@ -337,7 +363,7 @@ export async function listStashes(repo) {
 	return stashes;
 }
 
-export async function getTagDetails(repo, name) {
+export async function getTagDetails(repo: string, name: string) {
 	if (!name || typeof name !== 'string' || name.startsWith('-') || /[\0\n\r]/.test(name)) {
 		throw new GitError('invalid tag name');
 	}
@@ -378,7 +404,7 @@ export async function getTagDetails(repo, name) {
 	};
 }
 
-export async function getRepoInfo(repo) {
+export async function getRepoInfo(repo: string) {
 	const [refs, branch, uncommitted] = await Promise.all([
 		getRefs(repo),
 		getHeadBranch(repo),
@@ -393,22 +419,7 @@ export async function getRepoInfo(repo) {
 	};
 }
 
-function commitRow(fields) {
-	return {
-		hash: fields.hash,
-		parents: fields.parents || [],
-		author: fields.author || '',
-		email: fields.email || '',
-		date: fields.date || 0,
-		message: fields.message || '',
-		heads: [],
-		tags: [],
-		remotes: [],
-		stash: fields.stash ?? null
-	};
-}
-
-async function headExists(repo) {
+async function headExists(repo: string) {
 	try {
 		await runGit(repo, ['rev-parse', '--verify', 'HEAD']);
 		return true;
@@ -417,7 +428,7 @@ async function headExists(repo) {
 	}
 }
 
-async function repoHasCommits(repo) {
+async function repoHasCommits(repo: string) {
 	try {
 		return (await runGit(repo, ['rev-list', '-n', '1', '--all'])).trim() !== '';
 	} catch {
@@ -425,8 +436,22 @@ async function repoHasCommits(repo) {
 	}
 }
 
-async function readCommitLog(repo, options) {
-	const { maxCommits, branchFilter, showRemoteBranches, showTags, hasHead } = options;
+function isSafeRev(value: unknown) {
+	return Boolean(value) && typeof value === 'string' && !value.startsWith('-') && !/[\0\n\r]/.test(value);
+}
+
+async function readCommitLog(
+	repo: string,
+	options: {
+		maxCommits: number;
+		branchFilter: string[] | null;
+		showRemoteBranches: boolean;
+		showTags: boolean;
+		hasHead: boolean;
+		extraTips?: string[];
+	}
+) {
+	const { maxCommits, branchFilter, showRemoteBranches, showTags, hasHead, extraTips } = options;
 	const args = [
 		'-c',
 		'log.showSignature=false',
@@ -437,14 +462,19 @@ async function readCommitLog(repo, options) {
 	];
 	if (branchFilter) {
 		for (const b of branchFilter) {
-			if (!b || b.startsWith('-') || /[\0\n\r]/.test(b)) continue;
-			args.push(b);
+			if (isSafeRev(b)) args.push(b);
 		}
 	} else {
 		args.push('--branches');
 		if (showTags) args.push('--tags');
 		if (showRemoteBranches) args.push('--remotes');
 		if (hasHead) args.push('HEAD');
+		// Unfiltered logs also start from stash bases so max-count cannot
+		// hide the commit a stash sits on. A branch filter omits extra tips:
+		// insertStashes then drops stashes whose base is not in the log.
+		for (const tip of extraTips || []) {
+			if (isSafeRev(tip)) args.push(tip);
+		}
 	}
 	args.push('--');
 	const logOut = await runGit(repo, args);
@@ -453,16 +483,14 @@ async function readCommitLog(repo, options) {
 		if (!line) continue;
 		const parts = line.split(LOG_SEP);
 		if (parts.length < 6) continue;
-		commits.push(
-			commitRow({
-				hash: parts[0],
-				parents: parts[1] !== '' ? parts[1].split(' ') : [],
-				author: parts[2],
-				email: parts[3],
-				date: parseInt(parts[4], 10),
-				message: parts[5]
-			})
-		);
+		commits.push({
+			hash: parts[0],
+			parents: parts[1] !== '' ? parts[1].split(' ') : [],
+			author: parts[2],
+			email: parts[3],
+			date: parseInt(parts[4], 10),
+			message: parts[5]
+		});
 	}
 	return commits;
 }
@@ -470,7 +498,16 @@ async function readCommitLog(repo, options) {
 /**
  * Load commits, attach refs, optionally prepend uncommitted node, and layout lanes.
  */
-export async function getCommits(repo, options = {}) {
+export async function getCommits(
+	repo: string,
+	options: {
+		maxCommits?: number;
+		showRemoteBranches?: boolean;
+		showStashes?: boolean;
+		showTags?: boolean;
+		branches?: string[] | null;
+	} = {}
+) {
 	const maxCommits = options.maxCommits ?? DEFAULT_MAX_COMMITS;
 	const showRemoteBranches = options.showRemoteBranches !== false;
 	const showStashes = options.showStashes !== false;
@@ -487,78 +524,29 @@ export async function getCommits(repo, options = {}) {
 		listRemotes(repo)
 	]);
 
+	const stashBaseHashes = [
+		...new Set(stashList.map((s) => s.baseHash).filter((h): h is string => typeof h === 'string' && h.length > 0))
+	];
 	const logCommits = hasCommits
 		? await readCommitLog(repo, {
 				maxCommits,
 				branchFilter,
 				showRemoteBranches,
 				showTags,
-				hasHead
+				hasHead,
+				extraTips: stashBaseHashes
 			})
 		: [];
 	const moreCommitsAvailable = logCommits.length >= maxCommits;
 
-	const logLookup = Object.fromEntries(logCommits.map((c, i) => [c.hash, i]));
-	const stashRows = [];
-	for (const stash of stashList) {
-		if (typeof logLookup[stash.hash] === 'number') {
-			logCommits[logLookup[stash.hash]].stash = {
-				selector: stash.selector,
-				baseHash: stash.parents[0] || null
-			};
-			continue;
-		}
-		stashRows.push(
-			commitRow({
-				hash: stash.hash,
-				parents: stash.parents,
-				author: stash.author,
-				email: stash.email,
-				date: stash.date,
-				message: stash.message,
-				stash: { selector: stash.selector, baseHash: stash.parents[0] || null }
-			})
-		);
-	}
-
-	const commits = [];
-	if (uncommittedCount > 0) {
-		commits.push(
-			commitRow({
-				hash: UNCOMMITTED,
-				parents: refs.head ? [refs.head] : [],
-				author: '*',
-				date: Math.round(Date.now() / 1000),
-				message: `Uncommitted Changes (${uncommittedCount})`
-			})
-		);
-	}
-	commits.push(...stashRows, ...logCommits);
-
-	const lookup = Object.fromEntries(commits.map((c, i) => [c.hash, i]));
-	for (const h of refs.heads) {
-		if (typeof lookup[h.hash] === 'number') commits[lookup[h.hash]].heads.push(h.name);
-	}
-	if (showTags) {
-		for (const t of refs.tags) {
-			if (typeof lookup[t.hash] === 'number') {
-				commits[lookup[t.hash]].tags.push({ name: t.name, annotated: t.annotated });
-			}
-		}
-	}
-	if (showRemoteBranches) {
-		for (const r of refs.remotes) {
-			if (typeof lookup[r.hash] === 'number') {
-				const slash = r.name.indexOf('/');
-				commits[lookup[r.hash]].remotes.push({
-					name: r.name,
-					remote: slash >= 0 ? r.name.slice(0, slash) : null
-				});
-			}
-		}
-	}
-
-	const layout = layoutGraph(commits, { head: refs.head });
+	const { commits, layout } = assembleCommitGraph({
+		logCommits,
+		stashList,
+		uncommittedRow: uncommittedCount > 0 ? uncommittedCommit(refs.head, uncommittedCount) : null,
+		refs,
+		showTags,
+		showRemoteBranches
+	});
 	return {
 		repo,
 		head: refs.head,
@@ -573,7 +561,7 @@ export async function getCommits(repo, options = {}) {
 	};
 }
 
-async function getUnbornFileChanges(repo) {
+async function getUnbornFileChanges(repo: string) {
 	return (await readPorcelainStatus(repo)).map(({ filePath, c1, c2 }) => {
 		let type = 'M';
 		if (c1 === '?' || c2 === '?') type = 'U';
@@ -589,7 +577,7 @@ async function getUnbornFileChanges(repo) {
 	});
 }
 
-export async function getCommitDetails(repo, hash) {
+export async function getCommitDetails(repo: string, hash: string) {
 	if (hash === UNCOMMITTED) {
 		const info = await getRepoInfo(repo);
 		if (!info.head) {
@@ -660,7 +648,7 @@ export async function getCommitDetails(repo, hash) {
 	};
 }
 
-export async function getCommitComparison(repo, fromHash, toHash) {
+export async function getCommitComparison(repo: string, fromHash: string, toHash: string) {
 	const toUncommitted = toHash === UNCOMMITTED;
 	const [nameStatus, numStat, status] = await Promise.all([
 		getDiffNameStatus(repo, fromHash, toUncommitted ? UNCOMMITTED : toHash),
@@ -674,7 +662,7 @@ export async function getCommitComparison(repo, fromHash, toHash) {
 	};
 }
 
-function assertInsideRepo(repo, filePath) {
+function assertInsideRepo(repo: string, filePath: string) {
 	const root = path.resolve(repo);
 	const resolved = path.resolve(repo, filePath);
 	const prefix = root.endsWith(path.sep) ? root : root + path.sep;
@@ -684,7 +672,7 @@ function assertInsideRepo(repo, filePath) {
 	return resolved;
 }
 
-function assertRealPathInsideRepo(repo, realFile) {
+function assertRealPathInsideRepo(repo: string, realFile: string) {
 	const root = path.resolve(repo);
 	const prefix = root.endsWith(path.sep) ? root : root + path.sep;
 	if (realFile !== root && !realFile.startsWith(prefix)) {
@@ -692,13 +680,13 @@ function assertRealPathInsideRepo(repo, realFile) {
 	}
 }
 
-async function readWorkingTreeFile(repo, filePath) {
+async function readWorkingTreeFile(repo: string, filePath: string) {
 	const abs = assertInsideRepo(repo, filePath);
 	let st;
 	try {
 		st = await fs.lstat(abs);
-	} catch (err) {
-		if (err && err.code === 'ENOENT') return '';
+	} catch (err: unknown) {
+		if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'ENOENT') return '';
 		throw err;
 	}
 	if (st.isSymbolicLink()) {
@@ -711,7 +699,7 @@ async function readWorkingTreeFile(repo, filePath) {
 	return fs.readFile(realFile, 'utf8');
 }
 
-function isMissingFileAtRevision(message) {
+function isMissingFileAtRevision(message: string) {
 	return /does not exist in|exists on disk, but not in|is in the index, but not at|did not match any files|exists on disk, but not in '/i.test(
 		message
 	);
@@ -722,7 +710,7 @@ function isMissingFileAtRevision(message) {
  * on that side (add/delete). UNCOMMITTED / empty rev reads the working tree.
  * Invalid revisions and I/O errors other than missing files are thrown.
  */
-export async function getFileAtRevision(repo, rev, filePath) {
+export async function getFileAtRevision(repo: string, rev: string, filePath: string) {
 	if (!filePath) throw new GitError('file path is required');
 	assertInsideRepo(repo, filePath);
 	if (!rev || rev === UNCOMMITTED) {
@@ -731,7 +719,7 @@ export async function getFileAtRevision(repo, rev, filePath) {
 	try {
 		return await runGit(repo, ['show', `${rev}:${filePath}`]);
 	} catch (err) {
-		if (isMissingFileAtRevision(err.message || '')) return '';
+		if (isMissingFileAtRevision(err instanceof Error ? err.message : String(err))) return '';
 		throw err;
 	}
 }
@@ -739,12 +727,23 @@ export async function getFileAtRevision(repo, rev, filePath) {
 /**
  * Both sides of a file diff. Empty side for add/delete; working-tree for uncommitted.
  */
-export async function getFileDiffSides(repo, spec) {
+export async function getFileDiffSides(
+	repo: string,
+	spec: {
+		status?: string;
+		oldFilePath?: string;
+		newFilePath?: string;
+		path?: string;
+		filePath?: string;
+		fromHash?: string;
+		toHash?: string;
+	}
+) {
 	const status = spec.status || 'M';
-	const leftPath = spec.oldFilePath || spec.path || spec.filePath;
-	const rightPath = spec.newFilePath || spec.path || spec.filePath;
-	const fromHash = spec.fromHash;
-	const toHash = spec.toHash;
+	const fromHash = spec.fromHash || '';
+	const toHash = spec.toHash || '';
+	const leftPath = spec.oldFilePath || spec.path || spec.filePath || '';
+	const rightPath = spec.newFilePath || spec.path || spec.filePath || '';
 	let left = '';
 	let right = '';
 	if (status !== 'A' && status !== 'U') {
@@ -760,12 +759,12 @@ export async function getFileDiffSides(repo, spec) {
 	};
 }
 
-export function assertSafeText(value, label) {
+export function assertSafeText(value: unknown, label: string): asserts value is string {
 	if (!value || typeof value !== 'string') throw new GitError(`${label} is required`);
 	if (/[\0\n\r]/.test(value)) throw new GitError(`invalid ${label}`);
 }
 
-export function assertSafeRef(value, label) {
+export function assertSafeRef(value: unknown, label: string): asserts value is string {
 	assertSafeText(value, label);
 	if (value.startsWith('-')) throw new GitError(`invalid ${label}`);
 }

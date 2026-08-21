@@ -1,4 +1,4 @@
-export function escapeHtml(text) {
+export function escapeHtml(text: unknown) {
 	return String(text)
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')

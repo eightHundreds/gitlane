@@ -1,7 +1,9 @@
-import { UNCOMMITTED } from '../web/constants.js';
+import { UNCOMMITTED } from './constants.js';
 import { GitError, assertSafeRef, assertSafeText, getRepoInfo, runGit } from './git.js';
 
-async function runGitEdit(repo, args) {
+type P = Record<string, any>;
+
+async function runGitEdit(repo: string, args: string[]) {
 	return runGit(repo, args, {
 		env: {
 			GIT_EDITOR: 'true',
@@ -10,14 +12,14 @@ async function runGitEdit(repo, args) {
 	});
 }
 
-export async function checkout(repo, params) {
+export async function checkout(repo: string, params: P) {
 	const target = params.target || params.hash || params.branch;
 	assertSafeRef(target, 'checkout target');
 	await runGit(repo, ['checkout', target]);
 	return getRepoInfo(repo);
 }
 
-export async function createBranch(repo, params) {
+export async function createBranch(repo: string, params: P) {
 	const name = params.name;
 	const commitHash = params.commitHash || params.hash;
 	assertSafeRef(name, 'branch name');
@@ -37,21 +39,21 @@ export async function createBranch(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function deleteBranch(repo, params) {
+export async function deleteBranch(repo: string, params: P) {
 	assertSafeRef(params.name, 'branch name');
 	const args = ['branch', params.force ? '-D' : '-d', params.name];
 	await runGit(repo, args);
 	return getRepoInfo(repo);
 }
 
-export async function renameBranch(repo, params) {
+export async function renameBranch(repo: string, params: P) {
 	assertSafeRef(params.oldName, 'old branch name');
 	assertSafeRef(params.newName, 'new branch name');
 	await runGit(repo, ['branch', '-m', params.oldName, params.newName]);
 	return getRepoInfo(repo);
 }
 
-export async function mergeRef(repo, params) {
+export async function mergeRef(repo: string, params: P) {
 	const ref = params.ref || params.hash;
 	assertSafeRef(ref, 'merge ref');
 	const dirtyBefore =
@@ -64,8 +66,9 @@ export async function mergeRef(repo, params) {
 	if (!params.squash) return getRepoInfo(repo);
 	try {
 		await runGitEdit(repo, ['commit', '--no-edit', '-m', `Squash merge ${ref}`]);
-	} catch (err) {
-		if (/nothing to commit/i.test(err.message)) return getRepoInfo(repo);
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (/nothing to commit/i.test(message)) return getRepoInfo(repo);
 		try {
 			await runGit(repo, ['reset', dirtyBefore ? '--mixed' : '--hard', 'HEAD']);
 		} catch {
@@ -76,14 +79,14 @@ export async function mergeRef(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function rebaseOnto(repo, params) {
+export async function rebaseOnto(repo: string, params: P) {
 	const ref = params.ref || params.hash;
 	assertSafeRef(ref, 'rebase ref');
 	await runGitEdit(repo, ['rebase', ref]);
 	return getRepoInfo(repo);
 }
 
-export async function resetTo(repo, params) {
+export async function resetTo(repo: string, params: P) {
 	const target = params.hash || params.commit || 'HEAD';
 	assertSafeRef(target, 'reset target');
 	const mode = params.mode || 'mixed';
@@ -92,7 +95,7 @@ export async function resetTo(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function cherryPick(repo, params) {
+export async function cherryPick(repo: string, params: P) {
 	assertSafeRef(params.hash, 'commit hash');
 	const args = ['cherry-pick'];
 	if (params.recordOrigin) args.push('-x');
@@ -103,7 +106,7 @@ export async function cherryPick(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function revertCommit(repo, params) {
+export async function revertCommit(repo: string, params: P) {
 	assertSafeRef(params.hash, 'commit hash');
 	const args = ['revert', '--no-edit'];
 	if (params.parentIndex) args.push('-m', String(params.parentIndex));
@@ -112,7 +115,7 @@ export async function revertCommit(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function dropCommit(repo, params) {
+export async function dropCommit(repo: string, params: P) {
 	assertSafeRef(params.hash, 'commit hash');
 	const line = (await runGit(repo, ['rev-list', '--parents', '-n', '1', params.hash])).trim();
 	const parts = line.split(' ').filter(Boolean);
@@ -122,7 +125,7 @@ export async function dropCommit(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function addTag(repo, params) {
+export async function addTag(repo: string, params: P) {
 	assertSafeRef(params.name, 'tag name');
 	assertSafeRef(params.hash, 'commit hash');
 	const args = ['tag'];
@@ -134,7 +137,7 @@ export async function addTag(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function deleteTag(repo, params) {
+export async function deleteTag(repo: string, params: P) {
 	assertSafeRef(params.name, 'tag name');
 	await runGit(repo, ['tag', '-d', params.name]);
 	if (params.remote) {
@@ -144,14 +147,14 @@ export async function deleteTag(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function pushTag(repo, params) {
+export async function pushTag(repo: string, params: P) {
 	assertSafeRef(params.name, 'tag name');
 	assertSafeRef(params.remote, 'remote');
 	await runGit(repo, ['push', params.remote, `refs/tags/${params.name}`]);
 	return getRepoInfo(repo);
 }
 
-export async function pushBranch(repo, params) {
+export async function pushBranch(repo: string, params: P) {
 	assertSafeRef(params.name, 'branch name');
 	assertSafeRef(params.remote, 'remote');
 	const args = ['push'];
@@ -163,7 +166,7 @@ export async function pushBranch(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function fetchRemotes(repo, params = {}) {
+export async function fetchRemotes(repo: string, params: P = {}) {
 	const args = ['fetch'];
 	if (params.prune) args.push('--prune');
 	if (params.remote) {
@@ -176,7 +179,7 @@ export async function fetchRemotes(repo, params = {}) {
 	return getRepoInfo(repo);
 }
 
-export async function pullBranch(repo, params) {
+export async function pullBranch(repo: string, params: P) {
 	assertSafeRef(params.remote, 'remote');
 	assertSafeRef(params.branch, 'branch name');
 	const args = ['pull', '--no-edit'];
@@ -187,14 +190,14 @@ export async function pullBranch(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function deleteRemoteBranch(repo, params) {
+export async function deleteRemoteBranch(repo: string, params: P) {
 	assertSafeRef(params.remote, 'remote');
 	assertSafeRef(params.name, 'branch name');
 	await runGit(repo, ['push', params.remote, '--delete', params.name]);
 	return getRepoInfo(repo);
 }
 
-export async function fetchIntoLocal(repo, params) {
+export async function fetchIntoLocal(repo: string, params: P) {
 	assertSafeRef(params.remote, 'remote');
 	assertSafeRef(params.remoteBranch, 'remote branch');
 	assertSafeRef(params.localBranch, 'local branch');
@@ -206,7 +209,7 @@ export async function fetchIntoLocal(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function stashPush(repo, params = {}) {
+export async function stashPush(repo: string, params: P = {}) {
 	const args = ['stash', 'push'];
 	if (params.includeUntracked) args.push('-u');
 	if (params.message) {
@@ -217,7 +220,7 @@ export async function stashPush(repo, params = {}) {
 	return getRepoInfo(repo);
 }
 
-export async function stashApply(repo, params = {}) {
+export async function stashApply(repo: string, params: P = {}) {
 	const selector = params.selector || 'stash@{0}';
 	assertSafeRef(selector, 'stash selector');
 	const args = ['stash', 'apply'];
@@ -227,7 +230,7 @@ export async function stashApply(repo, params = {}) {
 	return getRepoInfo(repo);
 }
 
-export async function stashPop(repo, params = {}) {
+export async function stashPop(repo: string, params: P = {}) {
 	const selector = params.selector || 'stash@{0}';
 	assertSafeRef(selector, 'stash selector');
 	const args = ['stash', 'pop'];
@@ -237,14 +240,14 @@ export async function stashPop(repo, params = {}) {
 	return getRepoInfo(repo);
 }
 
-export async function stashDrop(repo, params = {}) {
+export async function stashDrop(repo: string, params: P = {}) {
 	const selector = params.selector || 'stash@{0}';
 	assertSafeRef(selector, 'stash selector');
 	await runGit(repo, ['stash', 'drop', selector]);
 	return getRepoInfo(repo);
 }
 
-export async function stashBranch(repo, params) {
+export async function stashBranch(repo: string, params: P) {
 	assertSafeRef(params.name, 'branch name');
 	const selector = params.selector || 'stash@{0}';
 	assertSafeRef(selector, 'stash selector');
@@ -252,14 +255,14 @@ export async function stashBranch(repo, params) {
 	return getRepoInfo(repo);
 }
 
-export async function cleanUntracked(repo, params = {}) {
+export async function cleanUntracked(repo: string, params: P = {}) {
 	const args = ['clean', '-f'];
 	if (params.directories !== false) args.push('-d');
 	await runGit(repo, args);
 	return getRepoInfo(repo);
 }
 
-const ACTION_MAP = {
+const ACTION_MAP: Record<string, (repo: string, params: P) => Promise<unknown>> = {
 	checkout,
 	createBranch,
 	deleteBranch,
@@ -284,10 +287,10 @@ const ACTION_MAP = {
 	stashDrop,
 	stashBranch,
 	clean: cleanUntracked,
-	resetUncommitted: (repo, params) => resetTo(repo, { hash: 'HEAD', mode: params.mode || 'mixed' })
+	resetUncommitted: (repo: string, params: P) => resetTo(repo, { hash: 'HEAD', mode: params.mode || 'mixed' })
 };
 
-export async function runAction(repo, action, params = {}) {
+export async function runAction(repo: string, action: string, params: P = {}) {
 	const fn = ACTION_MAP[action];
 	if (!fn) throw new GitError(`unknown action: ${action}`);
 	return fn(repo, params);

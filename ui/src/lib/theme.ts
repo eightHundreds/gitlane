@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'gitlane-theme';
 
-export function resolvedTheme() {
+export function resolvedTheme(): 'light' | 'dark' {
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
 		if (stored === 'light' || stored === 'dark') return stored;
@@ -14,22 +14,10 @@ export function monacoThemeName(theme = resolvedTheme()) {
 	return theme === 'light' ? 'gitgraph-light' : 'gitgraph-dark';
 }
 
-function syncThemeButton(theme) {
-	const btn = document.getElementById('themeBtn');
-	if (!btn) return;
-	const next = theme === 'light' ? 'dark' : 'light';
-	btn.textContent = next === 'light' ? 'Light' : 'Dark';
-	btn.title = `Switch to ${next} theme`;
-	btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-}
-
 export function applyTheme(theme = resolvedTheme()) {
 	document.documentElement.setAttribute('data-theme', theme);
 	document.documentElement.style.colorScheme = theme;
-	if (window.monaco?.editor) {
-		window.monaco.editor.setTheme(monacoThemeName(theme));
-	}
-	syncThemeButton(theme);
+	window.monaco?.editor?.setTheme(monacoThemeName(theme));
 }
 
 export function toggleTheme() {
@@ -40,6 +28,7 @@ export function toggleTheme() {
 		/* private mode */
 	}
 	applyTheme(next);
+	return next;
 }
 
 export function initTheme() {

@@ -1,13 +1,15 @@
+import type { GraphLayout } from '@gitlane/types';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function pixel(grid, p) {
+function pixel(grid: { x: number; y: number; offsetX: number; offsetY: number }, p: { x: number; y: number }) {
 	return {
 		x: p.x * grid.x + grid.offsetX,
 		y: p.y * grid.y + grid.offsetY
 	};
 }
 
-function drawPath(svg, d, colour, isCommitted) {
+function drawPath(svg: SVGElement, d: string, colour: string, isCommitted: boolean) {
 	const shadow = document.createElementNS(SVG_NS, 'path');
 	shadow.setAttribute('d', d);
 	shadow.setAttribute('class', 'shadow');
@@ -20,7 +22,12 @@ function drawPath(svg, d, colour, isCommitted) {
 	svg.appendChild(line);
 }
 
-function placeBranchLines(branch, grid, expandAt, expandY) {
+function placeBranchLines(
+	branch: GraphLayout['branches'][number],
+	grid: GraphLayout['grid'],
+	expandAt: number,
+	expandY: number
+) {
 	const placed = [];
 	for (let i = 0; i < branch.lines.length; i++) {
 		const line = branch.lines[i];
@@ -71,7 +78,14 @@ function placeBranchLines(branch, grid, expandAt, expandY) {
 	return placed;
 }
 
-function renderBranch(svg, branch, grid, colours, expandAt, expandY) {
+function renderBranch(
+	svg: SVGElement,
+	branch: GraphLayout['branches'][number],
+	grid: GraphLayout['grid'],
+	colours: string[],
+	expandAt: number,
+	expandY: number
+) {
 	const colour = colours[branch.colour % colours.length];
 	const dCurve = grid.y * 0.8;
 	const placed = placeBranchLines(branch, grid, expandAt, expandY);
@@ -119,7 +133,12 @@ function renderBranch(svg, branch, grid, colours, expandAt, expandY) {
 	}
 }
 
-export function renderGraph(svg, layout, onVertexClick, expand = { at: -1, y: 0 }) {
+export function renderGraph(
+	svg: SVGSVGElement,
+	layout: GraphLayout,
+	onVertexClick: (id: number, ev: MouseEvent) => void,
+	expand = { at: -1, y: 0 }
+) {
 	while (svg.firstChild) svg.removeChild(svg.firstChild);
 	const grid = layout.grid;
 	const colours = layout.colours;

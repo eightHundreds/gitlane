@@ -2,12 +2,45 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createFixtureRepo } from './helpers.js';
-import { listenGitGraph } from '../src/server.js';
+import { listenGitGraph } from '../dist/server.js';
 
 async function graphPage(browser, colorScheme = 'dark') {
 	const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, colorScheme });
 	await page.emulateMedia({ colorScheme });
 	return page;
+}
+
+async function drawerBox(page) {
+	return page.evaluate(() => {
+		const overlay = document.getElementById('diffOverlay');
+		const drawer = document.getElementById('diffDrawer');
+		const box = drawer.getBoundingClientRect();
+		return {
+			open: overlay.classList.contains('open'),
+			hidden: overlay.hidden,
+			fullscreen: overlay.classList.contains('fullscreen'),
+			fullLabel: document.getElementById('diffFull')?.textContent,
+			top: Math.round(box.top),
+			bottom: Math.round(box.bottom),
+			height: Math.round(box.height),
+			vh: window.innerHeight,
+			vw: window.innerWidth
+		};
+	});
+}
+
+async function waitForDrawerFullscreen(page) {
+	await page.waitForFunction(() => {
+		const overlay = document.getElementById('diffOverlay');
+		const box = document.getElementById('diffDrawer')?.getBoundingClientRect();
+		return (
+			overlay?.classList.contains('fullscreen') &&
+			box &&
+			box.top <= 1 &&
+			box.height >= window.innerHeight - 2
+		);
+	}, null, { timeout: 2000 });
+	return drawerBox(page);
 }
 
 describe('browser graph + Monaco (playwright if available)', () => {
@@ -87,6 +120,25 @@ describe('browser graph + Monaco (playwright if available)', () => {
 			assert.match(summary, /Parents:/);
 			assert.match(summary, /Author:/);
 			assert.match(summary, /Fixture User/);
+			await page.click('#cdvViewTree');
+			await page.waitForSelector('#cdvFiles .file-tree');
+			const tree = await page.evaluate(() => ({
+				active: document.getElementById('cdvViewTree')?.classList.contains('active'),
+				leaves: [...document.querySelectorAll('#cdvFiles .gitDiffPossible .tree-name')].map((el) => el.textContent)
+			}));
+			assert.equal(tree.active, true);
+			assert.ok(tree.leaves.includes('README.md'));
+			assert.ok(tree.leaves.every((n) => n && !n.includes('/')), `tree leaves must be basenames: ${tree.leaves.join(',')}`);
+			assert.equal(await page.evaluate(() => localStorage.getItem('gitlane-file-view')), 'tree');
+			await page.reload({ waitUntil: 'networkidle' });
+			await page.waitForSelector('tr.commit', { timeout: 10000 });
+			await page.locator('tr.commit', { hasText: 'add feature work' }).click();
+			await page.waitForSelector('#cdvFiles .file-tree', { timeout: 8000 });
+			assert.ok(
+				await page.locator('#cdvViewTree').evaluate((el) => el.classList.contains('active')),
+				'tree view must be restored after reload'
+			);
+			await page.click('#cdvViewList');
 			await page.locator('#cdvFiles .file-row', { hasText: 'README.md' }).click();
 			await page.waitForSelector('.monaco-diff-editor.side-by-side', { timeout: 15000 });
 			await page.waitForTimeout(800);
@@ -125,7 +177,54 @@ describe('browser graph + Monaco (playwright if available)', () => {
 			assert.ok(diffUi.models.some((text) => text.includes('hello world')), 'left revision missing');
 			assert.ok(diffUi.models.some((text) => text.includes('hello feature')), 'right revision missing');
 
+			const sheet = await drawerBox(page);
+			assert.equal(sheet.open, true);
+			assert.equal(sheet.hidden, false);
+			assert.equal(sheet.fullscreen, false);
+			assert.equal(sheet.fullLabel, 'Full screen');
+			assert.ok(sheet.top > 80, `drawer must leave the graph visible above it: ${JSON.stringify(sheet)}`);
+			assert.ok(Math.abs(sheet.bottom - sheet.vh) <= 2, `drawer must sit on the bottom edge: ${JSON.stringify(sheet)}`);
+			assert.ok(
+				sheet.height > 300 && sheet.height < sheet.vh - 40,
+				`drawer should be a bottom sheet, not full viewport: ${JSON.stringify(sheet)}`
+			);
+
+			await page.click('#diffFull');
+			const full = await waitForDrawerFullscreen(page);
+			assert.equal(full.fullscreen, true);
+			assert.equal(full.fullLabel, 'Exit full screen');
+			assert.ok(full.top <= 1, `fullscreen drawer must cover the top edge: ${JSON.stringify(full)}`);
+			assert.ok(full.height >= full.vh - 2, `fullscreen drawer must fill the viewport: ${JSON.stringify(full)}`);
+
+			await page.click('#diffFull');
+			await page.waitForFunction(
+				() => !document.getElementById('diffOverlay')?.classList.contains('fullscreen'),
+				null,
+				{ timeout: 2000 }
+			);
+
+			await page.setViewportSize({ width: 390, height: 720 });
+			await page.waitForFunction(() => {
+				const box = document.getElementById('diffDrawer')?.getBoundingClientRect();
+				return box && Math.abs(box.bottom - window.innerHeight) <= 2 && box.top > 40;
+			}, null, { timeout: 2000 });
+			const mobileSheet = await drawerBox(page);
+			assert.ok(mobileSheet.top > 40, `mobile drawer must leave room above: ${JSON.stringify(mobileSheet)}`);
+			assert.ok(
+				Math.abs(mobileSheet.bottom - mobileSheet.vh) <= 2,
+				`mobile drawer must sit on the bottom: ${JSON.stringify(mobileSheet)}`
+			);
+			assert.ok(
+				mobileSheet.height < mobileSheet.vh - 20,
+				`mobile drawer should not start fullscreen: ${JSON.stringify(mobileSheet)}`
+			);
+			await page.click('#diffFull');
+			await waitForDrawerFullscreen(page);
+			await page.click('#diffFull');
+			await page.setViewportSize({ width: 1400, height: 900 });
+
 			await page.locator('#diffClose').click();
+			await page.waitForFunction(() => document.getElementById('diffOverlay')?.hidden, null, { timeout: 2000 });
 			await page.locator('tr.commit', { hasText: 'merge feature into main' }).click({
 				modifiers: ['ControlOrMeta']
 			});
@@ -279,6 +378,8 @@ describe('browser graph + Monaco (playwright if available)', () => {
 				assert.equal(await page.locator('#' + id).count(), 1, `missing #${id}`);
 			}
 			assert.equal(await page.locator('#loadMore').count(), 1);
+			assert.equal(await page.locator('#diffDrawer').count(), 1);
+			assert.equal(await page.locator('#diffFull').count(), 1);
 			await page.click('#findBtn');
 			assert.equal(await page.locator('#findBar').isHidden(), false);
 			await page.fill('#findInput', 'feature work');

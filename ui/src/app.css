@@ -116,7 +116,7 @@ html, body {
 	font-weight: 600;
 }
 
-#toolbar button, .dialog-actions button, #diffClose {
+#toolbar button, .dialog-actions button, #diffBar button {
 	background: transparent;
 	color: var(--fg);
 	border: 1px solid var(--border);
@@ -125,7 +125,7 @@ html, body {
 	cursor: pointer;
 }
 
-#toolbar button:hover, .dialog-actions button:hover, #diffClose:hover {
+#toolbar button:hover, .dialog-actions button:hover, #diffBar button:hover {
 	background: var(--hover);
 }
 
@@ -210,6 +210,33 @@ button.primary {
 .file-row.dir {
 	cursor: pointer;
 	color: var(--muted);
+	font-weight: 600;
+	user-select: none;
+}
+
+.file-tree .file-row {
+	padding-left: calc(4px + var(--tree-depth, 0) * 14px);
+}
+
+.file-tree .tree-twist {
+	color: var(--muted);
+	font-weight: 400;
+}
+
+.file-tree .tree-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.tree-children[hidden] {
+	display: none !important;
+}
+
+#cdvControls button.active {
+	background: var(--hover);
+	border-color: var(--fg);
 }
 
 #cdvControls {
@@ -554,19 +581,77 @@ button.primary {
 	position: fixed;
 	inset: 0;
 	z-index: 40;
-	display: flex;
-	flex-direction: column;
-	background: var(--bg);
+	pointer-events: none;
 }
 
 #diffOverlay:not([hidden]) {
-	display: flex !important;
+	display: block !important;
+}
+
+#diffOverlay.open {
+	pointer-events: auto;
+}
+
+#diffBackdrop {
+	position: absolute;
+	inset: 0;
+	background: var(--scrim);
+	opacity: 0;
+	transition: opacity 0.22s ease;
+}
+
+#diffOverlay.open #diffBackdrop {
+	opacity: 1;
+}
+
+#diffDrawer {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: min(62vh, 740px);
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+	border-top: 1px solid var(--border);
+	border-radius: 12px 12px 0 0;
+	box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.28);
+	transform: translateY(100%);
+	transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s ease, border-radius 0.22s ease;
+	overflow: hidden;
+}
+
+#diffDrawer::before {
+	content: "";
+	align-self: center;
+	width: 36px;
+	height: 4px;
+	margin: 8px 0 -2px;
+	border-radius: 999px;
+	background: var(--muted);
+	opacity: 0.55;
+	flex-shrink: 0;
+}
+
+#diffOverlay.open #diffDrawer {
+	transform: translateY(0);
+}
+
+#diffOverlay.fullscreen #diffDrawer {
+	height: 100%;
+	border-top: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+#diffOverlay.fullscreen #diffDrawer::before {
+	display: none;
 }
 
 #diffBar {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 8px;
 	padding: 8px 12px;
 	background: var(--bg-header);
 	border-bottom: 1px solid var(--border);
@@ -584,10 +669,15 @@ button.primary {
 #monacoHost, .monaco-host {
 	flex: 1 1 auto;
 	min-height: 0;
-	height: calc(100vh - 42px);
 	width: 100%;
 	position: relative;
 	overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#diffBackdrop, #diffDrawer {
+		transition: none;
+	}
 }
 
 .empty {

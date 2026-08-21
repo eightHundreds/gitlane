@@ -1,14 +1,14 @@
-import { UNCOMMITTED } from './constants.js';
-import { api } from './api.js';
-import { promptDialog, showMenu } from './dialog.js';
-import { fieldChecked, fieldValue, showError } from './dom.js';
-import { escapeHtml } from './escape.js';
-import { openDiff, openFileAtRevision } from './diff.js';
-import { abbrev, copyText, formatDate } from './format.js';
-import { mutateAndReload } from './reload.js';
-import { state } from './state.js';
+import { UNCOMMITTED } from '@gitlane/constants';
+import { escapeHtml } from '@gitlane/escape';
+import type { Commit, FileChange } from '@gitlane/types';
+import { api } from './api';
+import { openDiff, openFileAtRevision } from './diff';
+import { abbrev, copyText, formatDate } from './format';
+import { fieldChecked, fieldValue, promptDialog, showError, showMenu } from './overlays.svelte';
+import { mutateAndReload } from './reload';
+import { app } from './state.svelte';
 
-function runOrError(fn) {
+function runOrError(fn: () => Promise<unknown>) {
 	return async () => {
 		try {
 			await fn();
@@ -18,15 +18,15 @@ function runOrError(fn) {
 	};
 }
 
-function remoteSelect(id, emptyLabel) {
-	const opts = state.remotes.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+function remoteSelect(id: string, emptyLabel?: string | null) {
+	const opts = app.remotes.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
 	if (emptyLabel != null) {
 		return `<select id="${id}"><option value="">${escapeHtml(emptyLabel)}</option>${opts}</select>`;
 	}
 	return `<select id="${id}">${opts}</select>`;
 }
 
-function mergeDialog(ref, label = ref) {
+function mergeDialog(ref: string, label = ref) {
 	promptDialog({
 		title: 'Merge',
 		bodyHtml: `<p>Merge ${escapeHtml(label)} into the current branch?</p>
@@ -41,7 +41,7 @@ function mergeDialog(ref, label = ref) {
 	});
 }
 
-function rebaseDialog(ref, label = ref) {
+function rebaseDialog(ref: string, label = ref) {
 	promptDialog({
 		title: 'Rebase',
 		bodyHtml: `<p>Rebase the current branch onto ${escapeHtml(label)}?</p>`,
@@ -49,7 +49,7 @@ function rebaseDialog(ref, label = ref) {
 	});
 }
 
-function resetDialog(hash) {
+function resetDialog(hash: string) {
 	promptDialog({
 		title: 'Reset',
 		bodyHtml: `<p>Reset current branch to ${escapeHtml(abbrev(hash))}</p>
@@ -63,7 +63,7 @@ function resetDialog(hash) {
 	});
 }
 
-function createBranchDialog(commitHash) {
+function createBranchDialog(commitHash: string) {
 	promptDialog({
 		title: 'Create branch',
 		bodyHtml: `<label>Name</label><input id="branchName" type="text" autofocus>
@@ -81,16 +81,16 @@ function createBranchDialog(commitHash) {
 	queueMicrotask(() => document.getElementById('branchName')?.focus());
 }
 
-export function checkoutTargetFor(commit) {
+export function checkoutTargetFor(commit: Commit) {
 	if (commit.hash === UNCOMMITTED) return null;
 	if (commit.heads && commit.heads.length) {
-		if (state.branch && commit.heads.includes(state.branch)) return state.branch;
+		if (app.branch && commit.heads.includes(app.branch)) return app.branch;
 		return commit.heads[0];
 	}
 	return commit.hash;
 }
 
-export function openCommitMenu(ev, commit) {
+export function openCommitMenu(ev: MouseEvent, commit: Commit) {
 	ev.preventDefault();
 	if (commit.hash === UNCOMMITTED) {
 		openUncommittedMenu(ev);
@@ -200,7 +200,7 @@ export function openCommitMenu(ev, commit) {
 	]);
 }
 
-export function openUncommittedMenu(ev) {
+export function openUncommittedMenu(ev: MouseEvent) {
 	showMenu(ev.clientX, ev.clientY, [
 		{
 			label: 'Stash uncommitted changes…',
@@ -244,8 +244,8 @@ export function openUncommittedMenu(ev) {
 	]);
 }
 
-export function openStashMenu(ev, commit) {
-	const selector = commit.stash.selector;
+export function openStashMenu(ev: MouseEvent, commit: Commit) {
+	const selector = commit.stash!.selector;
 	showMenu(ev.clientX, ev.clientY, [
 		{
 			label: 'Apply stash…',
@@ -300,7 +300,7 @@ export function openStashMenu(ev, commit) {
 	]);
 }
 
-export function openHeadMenu(ev, name) {
+export function openHeadMenu(ev: MouseEvent, name: string) {
 	showMenu(ev.clientX, ev.clientY, [
 		{ label: `Checkout branch "${name}"`, run: runOrError(() => mutateAndReload('checkout', { target: name })) },
 		{
@@ -330,7 +330,7 @@ export function openHeadMenu(ev, name) {
 		},
 		{ label: 'Merge into current branch…', run: () => mergeDialog(name) },
 		{ label: 'Rebase current branch on this branch…', run: () => rebaseDialog(name) },
-		...(state.remotes.length
+		...(app.remotes.length
 			? [
 					{
 						label: 'Push branch…',
@@ -357,9 +357,9 @@ export function openHeadMenu(ev, name) {
 	]);
 }
 
-export function openRemoteMenu(ev, fullName) {
+export function openRemoteMenu(ev: MouseEvent, fullName: string) {
 	const slash = fullName.indexOf('/');
-	const remote = slash >= 0 ? fullName.slice(0, slash) : state.remotes[0] || 'origin';
+	const remote = slash >= 0 ? fullName.slice(0, slash) : app.remotes[0] || 'origin';
 	const branch = slash >= 0 ? fullName.slice(slash + 1) : fullName;
 	showMenu(ev.clientX, ev.clientY, [
 		{
@@ -417,7 +417,7 @@ export function openRemoteMenu(ev, fullName) {
 	]);
 }
 
-export function openTagMenu(ev, name, annotated) {
+export function openTagMenu(ev: MouseEvent, name: string, annotated: boolean) {
 	showMenu(ev.clientX, ev.clientY, [
 		...(annotated
 			? [
@@ -446,7 +446,7 @@ export function openTagMenu(ev, name, annotated) {
 				promptDialog({
 					title: 'Delete tag',
 					bodyHtml: `<p>Delete tag ${escapeHtml(name)}?</p>
-						${state.remotes.length ? `<label>Also delete on remote</label>${remoteSelect('delTagRemote', '(local only)')}` : ''}`,
+						${app.remotes.length ? `<label>Also delete on remote</label>${remoteSelect('delTagRemote', '(local only)')}` : ''}`,
 					onOk: async () =>
 						mutateAndReload('deleteTag', {
 							name,
@@ -455,7 +455,7 @@ export function openTagMenu(ev, name, annotated) {
 				});
 			}
 		},
-		...(state.remotes.length
+		...(app.remotes.length
 			? [
 					{
 						label: 'Push tag…',
@@ -478,7 +478,7 @@ export function openTagMenu(ev, name, annotated) {
 	]);
 }
 
-export function openFileMenu(ev, file, fromHash, toHash) {
+export function openFileMenu(ev: MouseEvent, file: FileChange, fromHash: string | null, toHash: string | null) {
 	showMenu(ev.clientX, ev.clientY, [
 		{ label: 'View diff', run: () => openDiff(file, fromHash, toHash) },
 		{

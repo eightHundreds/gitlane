@@ -1,24 +1,24 @@
-export function csrfToken() {
+export function csrfToken(): string {
 	return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
 
-export async function api(path, options = {}) {
-	const headers = { ...(options.headers || {}) };
+export async function api(path: string, options: RequestInit = {}) {
+	const headers = new Headers(options.headers || {});
 	if (options.method && options.method !== 'GET') {
-		headers['X-Gitlane-Token'] = csrfToken();
+		headers.set('X-Gitlane-Token', csrfToken());
 	}
 	const res = await fetch(path, { ...options, headers });
-	let data = {};
+	let data: { error?: string } = {};
 	try {
 		data = await res.json();
 	} catch {
 		data = {};
 	}
 	if (!res.ok) throw new Error(data.error || res.statusText || 'Request failed');
-	return data;
+	return data as any;
 }
 
-export async function mutate(action, params = {}) {
+export async function mutate(action: string, params: Record<string, unknown> = {}) {
 	return api('/api/action', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

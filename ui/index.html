@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Gitlane</title>
+	<meta name="csrf-token" content="%%CSRF_TOKEN%%">
+	<meta name="gitlane-chrome" content="errorBanner commitTable commitGraph">
+	<script>
+		(function () {
+			try {
+				var stored = localStorage.getItem('gitlane-theme');
+				var theme =
+					stored === 'light' || stored === 'dark'
+						? stored
+						: window.matchMedia('(prefers-color-scheme: light)').matches
+							? 'light'
+							: 'dark';
+				document.documentElement.setAttribute('data-theme', theme);
+			} catch (e) {
+				document.documentElement.setAttribute('data-theme', 'dark');
+			}
+		})();
+	</script>
+</head>
+<body>
+	<script src="/vendor/monaco/vs/loader.js"></script>
+	<script>
+		window.require.config({ paths: { vs: '/vendor/monaco/vs' } });
+		window.MonacoEnvironment = {
+			getWorkerUrl: function () {
+				const origin = window.location.origin;
+				const worker = origin + '/vendor/monaco/vs/base/worker/workerMain.js';
+				const body = "self.MonacoEnvironment={baseUrl:'" + origin + "/vendor/monaco/'};importScripts('" + worker + "');";
+				return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(body);
+			}
+		};
+	</script>
+	<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

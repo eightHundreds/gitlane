@@ -1,9 +1,11 @@
 import http from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { existsSync, createReadStream, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GitError } from './git.js';
 import {
 	UNCOMMITTED,
 	getCommitComparison,
@@ -18,7 +20,13 @@ import { runAction } from './actions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const WEB_DIR = path.join(ROOT, 'web');
+const WEB_DIR = path.join(ROOT, 'dist', 'ui');
+
+type ServerCtx = {
+	csrfToken: string;
+	host: string;
+	port: number;
+};
 const require = createRequire(import.meta.url);
 
 export function monacoMinDir() {
@@ -48,7 +56,7 @@ const MIME = {
 	'.map': 'application/json'
 };
 
-function send(res, status, body, headers = {}) {
+function send(res: ServerResponse, status: number, body: string | Buffer, headers: Record<string, string | number> = {}) {
 	const payload = Buffer.isBuffer(body) ? body : Buffer.from(body ?? '');
 	res.writeHead(status, {
 		'Content-Length': payload.length,
@@ -57,7 +65,7 @@ function send(res, status, body, headers = {}) {
 	res.end(payload);
 }
 
-function sendJson(res, status, obj) {
+function sendJson(res: ServerResponse, status: number, obj: unknown) {
 	send(res, status, JSON.stringify(obj), {
 		'Content-Type': 'application/json; charset=utf-8',
 		'Cache-Control': 'no-store'
@@ -66,7 +74,7 @@ function sendJson(res, status, obj) {
 
 export const MAX_WRITE_BODY = 64 * 1024;
 
-export function allowedWriteOrigins(host, port) {
+export function allowedWriteOrigins(host: string | undefined, port: number | undefined | null) {
 	const origins = new Set();
 	if (!host || port == null) return origins;
 	origins.add(formatListenUrl(host, port).replace(/\/$/, ''));
@@ -82,7 +90,7 @@ export function allowedWriteOrigins(host, port) {
  * Block CSRF / DNS-rebinding writes: JSON body, session token, and
  * Origin (when present) must match the actual listen address.
  */
-export function mutationAllowed(req, ctx = {}) {
+export function mutationAllowed(req: { headers: IncomingMessage['headers'] }, ctx: Partial<ServerCtx> = {}) {
 	const type = String(req.headers['content-type'] || '')
 		.split(';')[0]
 		.trim()
@@ -113,9 +121,9 @@ export function mutationAllowed(req, ctx = {}) {
 	return { ok: true };
 }
 
-function readBody(req, maxBytes = MAX_WRITE_BODY) {
+function readBody(req: IncomingMessage, maxBytes = MAX_WRITE_BODY): Promise<Record<string, any>> {
 	return new Promise((resolve, reject) => {
-		const chunks = [];
+		const chunks: Buffer[] = [];
 		let n = 0;
 		let overflow = false;
 		req.on('data', (c) => {
@@ -124,7 +132,7 @@ function readBody(req, maxBytes = MAX_WRITE_BODY) {
 			if (n > maxBytes) {
 				overflow = true;
 				chunks.length = 0;
-				const err = new Error('Request body too large');
+				const err = new GitError('Request body too large');
 				err.statusCode = 413;
 				reject(err);
 				return;
@@ -148,14 +156,14 @@ function readBody(req, maxBytes = MAX_WRITE_BODY) {
 	});
 }
 
-function safeJoin(root, rel) {
+function safeJoin(root: string, rel: string) {
 	const resolved = path.resolve(root, rel);
 	const prefix = root.endsWith(path.sep) ? root : root + path.sep;
 	if (resolved !== root && !resolved.startsWith(prefix)) return null;
 	return resolved;
 }
 
-async function serveFile(res, filePath) {
+async function serveFile(res: ServerResponse, filePath: string) {
 	try {
 		const st = statSync(filePath);
 		if (!st.isFile()) {
@@ -164,7 +172,7 @@ async function serveFile(res, filePath) {
 		}
 		const ext = path.extname(filePath).toLowerCase();
 		res.writeHead(200, {
-			'Content-Type': MIME[ext] || 'application/octet-stream',
+			'Content-Type': MIME[ext as keyof typeof MIME] || 'application/octet-stream',
 			'Content-Length': st.size,
 			'Cache-Control': ext === '.html' || ext === '.js' || ext === '.css' ? 'no-store' : 'public, max-age=3600'
 		});
@@ -174,7 +182,7 @@ async function serveFile(res, filePath) {
 	}
 }
 
-async function handleGet(repo, url) {
+async function handleGet(repo: string, url: URL) {
 	const route = url.pathname;
 	const q = url.searchParams;
 	if (route === '/api/health') {
@@ -219,7 +227,7 @@ async function handleGet(repo, url) {
 	return null;
 }
 
-async function handleApi(repo, url, req, res, ctx) {
+async function handleApi(repo: string, url: URL, req: IncomingMessage, res: ServerResponse, ctx: ServerCtx) {
 	const route = url.pathname;
 	try {
 		if (req.method === 'GET') {
@@ -246,11 +254,12 @@ async function handleApi(repo, url, req, res, ctx) {
 		}
 		sendJson(res, 404, { error: `Unknown API route: ${req.method} ${route}` });
 	} catch (err) {
-		sendJson(res, err.statusCode || 400, { error: err.message || String(err) });
+		const e = err as { statusCode?: number; message?: string };
+		sendJson(res, e.statusCode || 400, { error: e.message || String(err) });
 	}
 }
 
-export function createGitGraphServer(options) {
+export function createGitGraphServer(options: { repo: string; host?: string; port?: number; ctx?: ServerCtx }) {
 	const repo = options.repo;
 	const ctx = options.ctx || {
 		csrfToken: randomBytes(32).toString('hex'),
@@ -300,12 +309,19 @@ export function createGitGraphServer(options) {
 	return { server, ctx };
 }
 
-export function formatListenUrl(host, port) {
+export function formatListenUrl(host: string, port: number) {
 	const hostname = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 	return `http://${hostname}:${port}/`;
 }
 
-export function listenGitGraph(options) {
+export function listenGitGraph(options: { repo: string; host?: string; port?: number }): Promise<{
+	server: http.Server;
+	url: string;
+	host: string;
+	port: number;
+	repo: string;
+	csrfToken: string;
+}> {
 	const host = options.host || '127.0.0.1';
 	const port = options.port ?? 3840;
 	const repo = options.repo;

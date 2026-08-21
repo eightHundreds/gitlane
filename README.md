@@ -31,7 +31,8 @@ gitlane <repo-path> [--port 3840] [--host 127.0.0.1] [--no-open]
 git clone https://github.com/eightHundreds/gitlane.git
 cd gitlane
 npm install
-node src/cli.js /path/to/repo
+npm run build
+node dist/cli.js /path/to/repo
 ```
 
 ```bash
@@ -44,14 +45,15 @@ npm test
 - 工作区有改动时显示 Uncommitted Changes 节点
 - 单击提交：在该行下方展开详情与变更文件
 - Ctrl/Cmd+单击第二个提交：比较
-- 单击文件：页内 Monaco 左右 diff
+- 单击文件：从底部滑出 Monaco 左右 diff，可全屏
+- 变更文件支持 Tree / List，偏好会记在本机
 - 右键提交 / 分支 / 远程 / 标签 / Stash / Uncommitted：checkout、branch、merge、rebase、reset、stash、push/fetch/pull 等
 - 工具栏：分支过滤、Remotes/Stashes、Fetch、Find、Load More、亮/暗主题（跟随系统，可手动切换）
 - 键盘：Ctrl/Cmd+F 查找，Ctrl/Cmd+R 刷新，Ctrl/Cmd+H 滚到 HEAD，方向键换详情，Esc 关闭
 
 ## 发版
 
-`package.json` 的 `version` 必须和 git tag 一致，例如 `1.0.1` 对应 `v1.0.1`。推送 tag 后，GitHub Actions 会跑测试、发布 npm，并创建 GitHub Release。
+`package.json` 的 `version` 必须和 git tag 一致，例如 `1.1.0` 对应 `v1.1.0`。推送 tag 后，GitHub Actions 会跑测试、发布 npm，并创建 GitHub Release。
 
 ```bash
 npm version patch   # 或 minor / major

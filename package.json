@@ -1,15 +1,14 @@
 {
   "name": "gitlane",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Local web UI for a git commit graph: colored lanes, inline details, and Monaco diffs.",
   "type": "module",
   "bin": {
-    "gitlane": "src/cli.js"
+    "gitlane": "dist/cli.js"
   },
   "files": [
-    "src",
-    "web",
+    "dist",
     "LICENSE",
     "README.md"
   ],
@@ -34,8 +33,10 @@
     "access": "public"
   },
   "scripts": {
-    "start": "node src/cli.js",
-    "test": "node --test test/*.test.js"
+    "build": "tsc -p tsconfig.json && vite build --config ui/vite.config.ts",
+    "start": "node dist/cli.js",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"
@@ -44,6 +45,11 @@
     "monaco-editor": "^0.52.2"
   },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/node": "^26.2.0",
+    "playwright": "^1.62.1",
+    "svelte": "^5.56.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
   }
 }

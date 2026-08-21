@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCliArgs } from '../src/cli.js';
+import { parseCliArgs } from '../dist/cli.js';
 
 describe('CLI args', () => {
 	it('parses repo, port, host, and --no-open', () => {

@@ -5,8 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEmptyRepo, createFixtureRepo, gitRaw, postAction } from './helpers.js';
 import { existsSync } from 'node:fs';
-import { formatListenUrl, listenGitGraph, monacoMinDir, mutationAllowed, MAX_WRITE_BODY } from '../src/server.js';
-import { UNCOMMITTED } from '../web/constants.js';
+import { formatListenUrl, listenGitGraph, monacoMinDir, mutationAllowed, MAX_WRITE_BODY } from '../dist/server.js';
+import { UNCOMMITTED } from '../dist/constants.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -48,13 +48,14 @@ describe('HTTP server (shipped entry adapter)', () => {
 		async function walk(dir) {
 			const out = [];
 			for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
+				if (ent.name === 'node_modules' || ent.name === 'dist') continue;
 				const p = path.join(dir, ent.name);
 				if (ent.isDirectory()) out.push(...(await walk(p)));
-				else if (/\.(js|html|css|json)$/.test(ent.name)) out.push(p);
+				else if (/\.(js|ts|html|css|json|svelte)$/.test(ent.name)) out.push(p);
 			}
 			return out;
 		}
-		const files = [...(await walk(path.join(ROOT, 'src'))), ...(await walk(path.join(ROOT, 'web')))];
+		const files = [...(await walk(path.join(ROOT, 'src'))), ...(await walk(path.join(ROOT, 'ui')))];
 		for (const file of files) {
 			const text = await fs.readFile(file, 'utf8');
 			assert.doesNotMatch(text, /from ['"]vscode['"]|require\(['"]vscode['"]\)/);
@@ -65,18 +66,16 @@ describe('HTTP server (shipped entry adapter)', () => {
 		const ui = await fetch(listening.url);
 		assert.equal(ui.status, 200);
 		const html = await ui.text();
-		assert.match(html, /commitGraph/);
 		assert.match(html, /monaco/i);
 		assert.match(html, /Gitlane/);
-
-		const appJs = await fetch(new URL('/app.js', listening.url));
-		assert.equal(appJs.status, 200);
-		const appText = await appJs.text();
-		assert.doesNotMatch(appText, /\bvscode\b/);
-		const diffJs = await (await fetch(new URL('/diff.js', listening.url))).text();
-		assert.match(diffJs, /monaco/i);
-		const tableJs = await (await fetch(new URL('/table.js', listening.url))).text();
-		assert.match(tableJs, /renderGraph/);
+		assert.match(html, /\/assets\//);
+		assert.doesNotMatch(html, /\bvscode\b/);
+		const asset = html.match(/\/assets\/index-[^"]+\.js/);
+		assert.ok(asset, 'built UI script missing');
+		const bundle = await (await fetch(new URL(asset[0], listening.url))).text();
+		assert.match(bundle, /commitGraph/);
+		assert.match(bundle, /monaco/i);
+		assert.doesNotMatch(bundle, /from ['"]vscode['"]/);
 
 		const loader = await fetch(new URL('/vendor/monaco/vs/loader.js', listening.url));
 		assert.equal(loader.status, 200);
@@ -282,40 +281,25 @@ describe('HTTP server (shipped entry adapter)', () => {
 
 	it('served UI includes Gitlane chrome and ships UI modules', async () => {
 		const html = await (await fetch(listening.url)).text();
-		assert.match(html, /id="errorBanner"/);
-		assert.match(html, /commitGraph/);
-		assert.match(html, /id="findBar"/);
-		assert.match(html, /id="fetchBtn"/);
-		assert.match(html, /id="themeBtn"/);
-		assert.match(html, /id="branchFilter"/);
-		assert.match(html, /id="showRemotes"/);
-		assert.match(html, /id="showStashes"/);
-		assert.match(html, /Load More Commits/);
-		const css = await (await fetch(new URL('/styles.css', listening.url))).text();
-		assert.match(css, /data-theme="light"/);
-		const modules = [
-			'/app.js',
-			'/menus.js',
-			'/table.js',
-			'/cdv.js',
-			'/diff.js',
-			'/find.js',
-			'/api.js',
-			'/filetree.js',
-			'/constants.js',
-			'/theme.js'
-		];
-		for (const pathName of modules) {
-			const res = await fetch(new URL(pathName, listening.url));
-			assert.equal(res.status, 200, `missing ${pathName}`);
-		}
-		const treeJs = await fetch(new URL('/filetree.js', listening.url));
-		assert.match(await treeJs.text(), /export function filesToTreeHtml/);
-		const table = await (await fetch(new URL('/table.js', listening.url))).text();
-		assert.match(table, /gitRefHeadRemote/);
-		assert.match(table, /data-ref-type="remote"/);
-		const menus = await (await fetch(new URL('/menus.js', listening.url))).text();
-		for (const label of [
+		assert.match(html, /Gitlane/);
+		assert.match(html, /monaco/i);
+		const jsHref = html.match(/\/assets\/index-[^"]+\.js/);
+		const cssHref = html.match(/\/assets\/index-[^"]+\.css/);
+		assert.ok(jsHref && cssHref, 'vite assets missing from index.html');
+		const js = await (await fetch(new URL(jsHref[0], listening.url))).text();
+		const css = await (await fetch(new URL(cssHref[0], listening.url))).text();
+		assert.match(css, /data-theme=.?light/);
+		for (const token of [
+			'errorBanner',
+			'commitGraph',
+			'findBar',
+			'fetchBtn',
+			'themeBtn',
+			'branchFilter',
+			'showRemotes',
+			'showStashes',
+			'Load More Commits',
+			'gitRefHeadRemote',
 			'Add tag',
 			'Create branch',
 			'Cherry pick',
@@ -325,7 +309,7 @@ describe('HTTP server (shipped entry adapter)', () => {
 			'Stash uncommitted changes',
 			'View file at this revision'
 		]) {
-			assert.ok(menus.includes(label), `menus.js missing ${label}`);
+			assert.ok(js.includes(token), `UI bundle missing ${token}`);
 		}
 	});
 

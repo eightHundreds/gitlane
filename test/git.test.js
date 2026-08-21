@@ -9,10 +9,12 @@ import {
 	getCommits,
 	getFileAtRevision,
 	getFileDiffSides,
+	assembleCommitGraph,
+	insertStashes,
 	layoutGraph
-} from '../src/git.js';
-import { runAction } from '../src/actions.js';
-import { layoutGraph as layoutGraphDirect } from '../src/layout.js';
+} from '../dist/git.js';
+import { runAction } from '../dist/actions.js';
+import { layoutGraph as layoutGraphDirect } from '../dist/layout.js';
 import {
 	createEmptyRepo,
 	createFixtureRepo,
@@ -316,25 +318,135 @@ describe('git read/write + graph layout on a real repository', () => {
 		assert.ok(mergeNode.heads.includes('main'));
 	});
 
-	it('lists stashes newest-first after the uncommitted node', async () => {
+	it('places each stash immediately above the commit it was created from', async () => {
+		const isolated = await createFixtureRepo();
+		try {
+			await fs.unlink(path.join(isolated.repo, 'uncommitted.txt'));
+			await gitRaw(isolated.repo, ['checkout', 'feature']);
+			await fs.writeFile(path.join(isolated.repo, 'on-feature.txt'), 'stashed\n');
+			await runAction(isolated.repo, 'stash', { message: 'on-feature', includeUntracked: true });
+			await gitRaw(isolated.repo, ['checkout', 'main']);
+			const data = await getCommits(isolated.repo);
+			const featureIdx = data.commits.findIndex((c) => c.hash === isolated.hashes.feature);
+			const stashIdx = data.commits.findIndex((c) => c.stash);
+			assert.ok(stashIdx >= 0, 'stash row missing');
+			assert.equal(stashIdx, featureIdx - 1);
+			assert.deepEqual(data.commits[stashIdx].parents, [isolated.hashes.feature]);
+			assert.notEqual(stashIdx, data.commits.length - 1);
+			assert.match(data.commits[stashIdx].stash.selector, /stash@\{0\}/);
+		} finally {
+			await fs.rm(isolated.repo, { recursive: true, force: true });
+		}
+	});
+
+	it('orders multiple stashes on the same base newest-first above that commit', async () => {
 		const isolated = await createFixtureRepo();
 		try {
 			await runAction(isolated.repo, 'stash', { message: 'first', includeUntracked: true });
 			await fs.writeFile(path.join(isolated.repo, 'second.txt'), 'two\n');
 			await runAction(isolated.repo, 'stash', { message: 'second', includeUntracked: true });
 			const data = await getCommits(isolated.repo);
-			const stashes = data.commits.filter((c) => c.stash);
-			assert.ok(stashes.length >= 2);
-			assert.equal(stashes[0].stash.selector, 'stash@{0}');
-			assert.match(stashes[0].message, /second/);
-			assert.equal(stashes[1].stash.selector, 'stash@{1}');
-			assert.match(stashes[1].message, /first/);
-			assert.equal(
-				data.commits.findIndex((c) => c.hash === UNCOMMITTED),
-				-1
-			);
+			const mergeIdx = data.commits.findIndex((c) => c.hash === isolated.hashes.merge);
+			const s0 = data.commits.findIndex((c) => c.stash && c.stash.selector === 'stash@{0}');
+			const s1 = data.commits.findIndex((c) => c.stash && c.stash.selector === 'stash@{1}');
+			assert.ok(mergeIdx > 0);
+			assert.equal(s1, mergeIdx - 1);
+			assert.equal(s0, mergeIdx - 2);
+			assert.match(data.commits[s0].message, /second/);
+			assert.match(data.commits[s1].message, /first/);
+			assert.deepEqual(data.commits[s0].parents, [isolated.hashes.merge]);
 		} finally {
 			await fs.rm(isolated.repo, { recursive: true, force: true });
 		}
+	});
+});
+
+describe('insertStashes', () => {
+	it('emits stash rows immediately above their base, newest first', () => {
+		const log = [
+			{ hash: 'm', parents: ['t'], message: 'merge' },
+			{ hash: 't', parents: ['i'], message: 'tip' }
+		];
+		const stashes = [
+			{ hash: 's1', selector: 'stash@{1}', baseHash: 'm', date: 1, author: 'a', email: 'e', message: 'first' },
+			{ hash: 's0', selector: 'stash@{0}', baseHash: 'm', date: 2, author: 'a', email: 'e', message: 'second' }
+		];
+		const out = insertStashes(log, stashes, { hash: '*', parents: ['m'], message: 'dirty' });
+		assert.equal(out[0].hash, '*');
+		assert.equal(out[1].hash, 's0');
+		assert.equal(out[2].hash, 's1');
+		assert.equal(out[3].hash, 'm');
+		assert.equal(out[4].hash, 't');
+		assert.deepEqual(out[1].parents, ['m']);
+		assert.equal(out[1].stash.selector, 'stash@{0}');
+		assert.equal(out[2].stash.selector, 'stash@{1}');
+	});
+
+	it('annotates a stash hash already in the log instead of duplicating it', () => {
+		const log = [
+			{ hash: 's', parents: ['m', 'idx'], message: 'wip' },
+			{ hash: 'm', parents: [], message: 'main' }
+		];
+		const out = insertStashes(log, [
+			{ hash: 's', selector: 'stash@{0}', baseHash: 'm', date: 1, author: 'a', email: 'e', message: 'wip' }
+		]);
+		assert.equal(out.length, 2);
+		assert.equal(out[0].hash, 's');
+		assert.deepEqual(out[0].parents, ['m']);
+		assert.equal(out[0].stash.selector, 'stash@{0}');
+	});
+
+	it('drops stashes whose base is not in the log', () => {
+		const out = insertStashes([{ hash: 'm', parents: [], message: 'main' }], [
+			{ hash: 's', selector: 'stash@{0}', baseHash: 'gone', date: 1, author: 'a', email: 'e', message: 'x' }
+		]);
+		assert.equal(out.length, 1);
+		assert.equal(out[0].hash, 'm');
+		assert.equal(out[0].stash, null);
+	});
+});
+
+describe('assembleCommitGraph', () => {
+	it('inserts stashes, attaches refs, and lays out lanes', () => {
+		const { commits, layout } = assembleCommitGraph({
+			logCommits: [
+				{ hash: 'm', parents: ['f', 't'], message: 'merge' },
+				{ hash: 'f', parents: ['i'], message: 'feature' },
+				{ hash: 'i', parents: [], message: 'initial' }
+			],
+			stashList: [
+				{ hash: 's0', selector: 'stash@{0}', baseHash: 'f', date: 20, author: 'a', email: 'e', message: 'wip' }
+			],
+			uncommittedRow: {
+				hash: '*',
+				parents: ['m'],
+				author: '*',
+				email: '',
+				date: 1,
+				message: 'Uncommitted Changes (1)',
+				heads: [],
+				tags: [],
+				remotes: [],
+				stash: null
+			},
+			refs: {
+				head: 'm',
+				heads: [{ hash: 'm', name: 'main' }],
+				tags: [{ hash: 'm', name: 'v1.0', annotated: true }],
+				remotes: [{ hash: 'm', name: 'origin/main' }]
+			}
+		});
+		assert.equal(commits[0].hash, '*');
+		const featureIdx = commits.findIndex((c) => c.hash === 'f');
+		assert.equal(commits[featureIdx - 1].hash, 's0');
+		assert.deepEqual(commits[featureIdx - 1].parents, ['f']);
+		const merge = commits.find((c) => c.hash === 'm');
+		assert.ok(merge.heads.includes('main'));
+		assert.ok(merge.tags.some((t) => t.name === 'v1.0'));
+		assert.ok(merge.remotes.some((r) => r.name === 'origin/main'));
+		assert.equal(layout.vertices.length, commits.length);
+		assert.ok(layout.branches.length >= 1);
+		assert.equal(layout.vertices[0].isStash, false);
+		assert.equal(layout.vertices[featureIdx - 1].isStash, true);
 	});
 });

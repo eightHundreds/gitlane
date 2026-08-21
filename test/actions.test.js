@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createFixtureRepo, gitRaw, postAction } from './helpers.js';
-import { getCommits, getTagDetails, UNCOMMITTED } from '../src/git.js';
-import { runAction } from '../src/actions.js';
-import { listenGitGraph } from '../src/server.js';
+import { getCommits, getTagDetails, UNCOMMITTED } from '../dist/git.js';
+import { runAction } from '../dist/actions.js';
+import { listenGitGraph } from '../dist/server.js';
 
 describe('git actions on a real repository', () => {
 	let fx;
